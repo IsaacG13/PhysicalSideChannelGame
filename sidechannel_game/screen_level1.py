@@ -10,6 +10,17 @@ This file only draws the screens and talks to the save file.
 
 Flow:  lab (measure + submit bit count)  ->  short answer  ->  results
 
+Lab rules (numbers live in game_with_hints.py):
+  * at most MAX_BATCHES batches of runs; the plot's colour key (legend) can be
+    hidden / shown with the KEY button above the plot
+  * a wrong number can't be submitted twice: repeating it is refused and does
+    not use up an attempt
+  * hint 1 is open from the start; hint 2 unlocks after 1 wrong attempt, hint 3
+    after 2 (g.hint_unlocked)
+  * once the bit-count puzzle is over, "Show correct answer & explanation"
+    opens a card with the answer worked out from the player's own measurements
+    (it opens by itself after the last wrong attempt)
+
 The player's seed picks the key: TimingSimulator is seeded with the saved seed.
 
 Saving (progress.py)
@@ -57,13 +68,17 @@ class Level1Screen(tk.Frame):
         self.sa_points = 0
         self.bits_done = False
         self.hints_shown = 0
+        self.guesses = []                          # every number submitted, in order
+        self.show_key = not self.save.flag("level1_hide_key")
         self.tour = None
+        self._modal_close = None
         self._hint_view = 0
         if not self.practice:                      # resume where the player left off
             rec = self.save.level("level1")
             self.attempt = int(rec.get("attempt", 0))
             self.bit_points = int(rec.get("bit_points", 0))
             self.bits_done = bool(rec.get("bits_done", False))
+            self.guesses = [int(x) for x in rec.get("guesses", [])]
 
         # --- frame: top bar + a stage that is swapped between views ------------
         self.bar, right = topbar(self, self.F, "LEVEL 1  -  TIMING ATTACK", "", self.app.show_menu)
@@ -83,6 +98,7 @@ class Level1Screen(tk.Frame):
     # ------------------------------------------------------------------ utils
     def _clear(self):
         self.end_tour()
+        self._close_modal()
         for w in self.stage.winfo_children():
             w.destroy()
 
@@ -162,7 +178,8 @@ class Level1Screen(tk.Frame):
                  variable=self.runs_var, showvalue=0, bg=C["amber"], troughcolor=C["inset"],
                  highlightthickness=0, bd=0, width=16, activebackground=C["amber_hi"],
                  sliderrelief="raised", sliderlength=26, length=COL_W - px(50)).pack(fill="x", pady=(8, 2))
-        RetroButton(meas, "> RUN BATCH", self.run_batch, font=F["btn"]).pack(fill="x", pady=(8, 6))
+        self.run_btn = RetroButton(meas, "> RUN BATCH", self.run_batch, font=F["btn"])
+        self.run_btn.pack(fill="x", pady=(8, 6))
         RetroButton(meas, "CLEAR MEASUREMENTS", self.clear_runs, kind="secondary",
                     font=F["small"]).pack(fill="x")
 
@@ -200,6 +217,8 @@ class Level1Screen(tk.Frame):
         self.feedback = tk.Label(sub, text="", bg=C["panel"], font=F["smallb"],
                                  wraplength=COL_W - px(50), justify="left", anchor="w")
         self.feedback.pack(fill="x", pady=(4, 0))
+        self.explain_btn = RetroButton(sub, "", self.show_explanation, kind="secondary",
+                                       font=F["small"])
 
         self.hint_panel = panel(right, "Stuck?", F, fill="x", pady=(8, 0))
         self.t_hint = self.hint_panel.outer
@@ -251,8 +270,16 @@ class Level1Screen(tk.Frame):
         self.canvas = FigureCanvasTkAgg(self.fig, master=scope)
         self.canvas.get_tk_widget().configure(bg=C["inset"], highlightthickness=0)
         self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)
+        # show / hide the batch colour key; sits over the plot's top-right corner
+        self.key_btn = RetroButton(scope, "", self.toggle_key, kind="secondary",
+                                   font=F["label"])
+        self.key_btn.config(padx=8, pady=2)
+        self.key_btn.place(relx=1.0, x=-px(10), y=px(6), anchor="ne")
+        self._refresh_key_btn()
 
         if self.bits_done:
+            if self.guesses:
+                self.guess_var.set(str(self.guesses[-1]))
             self.guess.config(state="disabled")
         self._refresh()
         if not self.save.flag("level1_tour_seen") and not self.bits_done:
@@ -260,7 +287,8 @@ class Level1Screen(tk.Frame):
 
     # ------------------------------------------------------------ lab: hints
     def _hint_available(self):
-        return not (self.hints_shown == g.HINT_LOCKED_UNTIL_WRONG and self.attempt == 0)
+        """The next hint is open once enough wrong attempts have been made."""
+        return g.hint_unlocked(self.hints_shown, self.attempt)
 
     def next_hint(self):
         if self.hints_shown >= len(g.HINTS) or not self._hint_available():
@@ -280,7 +308,9 @@ class Level1Screen(tk.Frame):
         if n >= len(g.HINTS):
             pass
         elif not self._hint_available():
-            self.hint_btn.config(text="NEXT HINT: AFTER 1 ATTEMPT")
+            need = self.hints_shown - self.attempt
+            self.hint_btn.config(text="HINT %d: AFTER %d MORE MISS%s"
+                                      % (n + 1, need, "" if need == 1 else "ES"))
             self.hint_btn.set_enabled(False)
         else:
             self.hint_btn.config(text="SHOW HINT %d OF %d" % (n + 1, len(g.HINTS)))
@@ -308,21 +338,24 @@ class Level1Screen(tk.Frame):
              "These are the numbers you'll need: how long one square and one multiply "
              "take. Keep them in mind."),
             (self.t_meas, "Step 1 · Measure",
-             "Pick how many runs to time, then press Run batch. You can run as many "
-             "batches as you like. More runs give a more reliable answer."),
+             "Pick how many runs to time, then press Run batch. You can run up to "
+             "%d batches. More runs give a more reliable answer." % g.MAX_BATCHES),
             (self.t_scope, "Read the results",
              "Each dot is one run. Random jitter makes the dots scatter, so one run "
              "isn't enough. The white line is the running mean: it settles down as you "
-             "add runs. The yellow line in the histogram marks the mean."),
+             "add runs. The yellow line in the histogram marks the mean. The KEY button "
+             "in the corner hides or shows the batch colour key."),
             (self.t_stats, "The numbers",
              "The exact mean time is here. The standard error tells you how much the "
              "mean could still move. Smaller is better."),
             (self.t_sub, "Step 2 · Submit",
              "Enter how many key bits are 1. You get 3 attempts, worth 3, 2 and 1 "
-             "points. You'll only be told correct or incorrect."),
+             "points. You'll only be told correct or incorrect, and you can't submit "
+             "the same wrong number twice."),
             (self.t_hint, "Need help?",
-             "Hints are here and don't cost points. The last hint unlocks after your "
-             "first attempt. You can replay this tour from \"How to play\" at the top."),
+             "Hints are here and don't cost points. Hint 1 is open now; hint 2 unlocks "
+             "after a wrong attempt and hint 3 after a second one. You can replay this "
+             "tour from \"How to play\" at the top."),
         ]
 
     def start_tour(self):
@@ -426,6 +459,8 @@ class Level1Screen(tk.Frame):
 
     # ------------------------------------------------------- lab: actions
     def run_batch(self):
+        if self.n_batches >= g.MAX_BATCHES:
+            return
         new = self.sim.run_batch(self.runs_var.get())
         self.n_batches += 1
         self.times = np.concatenate([self.times, new])
@@ -438,6 +473,15 @@ class Level1Screen(tk.Frame):
         self.n_batches = 0
         self._refresh()
 
+    def toggle_key(self):
+        self.show_key = not self.show_key
+        self.save.set_flag("level1_hide_key", not self.show_key)
+        self._refresh_key_btn()
+        self._draw()
+
+    def _refresh_key_btn(self):
+        self.key_btn.config(text="HIDE KEY" if self.show_key else "SHOW KEY")
+
     def submit_bits(self):
         if self.bits_done or not self.submit_btn.enabled:
             return
@@ -449,19 +493,32 @@ class Level1Screen(tk.Frame):
             self.feedback.config(text="Enter a whole number from 0 to %d." % g.KEY_BITS,
                                  fg=C["warn"])
             return
+        if guess in self.guesses:                   # same wrong answer again: no attempt used
+            self.feedback.config(fg=C["warn"],
+                                 text="Already tried %d - not counted. Pick another number."
+                                      % guess)
+            return
         self.attempt += 1
+        self.guesses.append(guess)
+        failed = False
         if guess == self.sim.ones:
             self.bit_points = g.points_for_attempt(self.attempt)
             self.bits_done = True
             self.feedback.config(fg=C["good"], text="CORRECT!  +%d points" % self.bit_points)
         elif self.attempt >= g.MAX_ATTEMPTS:
             self.bits_done = True
+            failed = True
             self.feedback.config(fg=C["bad"], text="INCORRECT. No attempts left.")
         else:
-            self.feedback.config(fg=C["bad"], text="INCORRECT. Try again.")
+            msg = "INCORRECT. Try again."
+            if self.attempt < len(g.HINTS) and g.hint_unlocked(self.attempt, self.attempt):
+                msg += "  Hint %d unlocked." % (self.attempt + 1)
+            self.feedback.config(fg=C["bad"], text=msg)
         self._persist(attempt=self.attempt, bits_done=self.bits_done,
-                      bit_points=self.bit_points)
+                      bit_points=self.bit_points, guesses=list(self.guesses))
         self._refresh()
+        if failed:
+            self.after(400, self.show_explanation)  # show the answer right away
 
     def _refresh(self):
         left = g.MAX_ATTEMPTS - self.attempt
@@ -469,8 +526,16 @@ class Level1Screen(tk.Frame):
         if self.bits_done:
             self.worth_lbl.config(text="")
         else:
+            pts = g.points_for_attempt(self.attempt + 1)
             self.worth_lbl.config(
-                text="Next correct answer: %d pts" % g.points_for_attempt(self.attempt + 1))
+                text="Worth %d pts  ·  tried %s" % (pts, ", ".join(map(str, self.guesses)))
+                if self.guesses else "Next correct answer: %d pts" % pts)
+        if self.n_batches < g.MAX_BATCHES:
+            self.run_btn.config(text="> RUN BATCH  %d/%d" % (self.n_batches + 1, g.MAX_BATCHES))
+            self.run_btn.set_enabled(True)
+        else:
+            self.run_btn.config(text="BATCH LIMIT REACHED")
+            self.run_btn.set_enabled(False)
         has_data = len(self.times) >= g.MIN_RUNS
         self.submit_btn.set_enabled(has_data and not self.bits_done)
         placeholder = "Run at least one batch first."
@@ -485,6 +550,10 @@ class Level1Screen(tk.Frame):
                     text=("CORRECT!  +%d points" % self.bit_points) if self.bit_points
                     else "INCORRECT. No attempts left.")
             self.guess.config(state="disabled")
+            self.explain_btn.config(text="SEE EXPLANATION" if self.bit_points
+                                    else "ANSWER & EXPLANATION")
+            if not self.explain_btn.winfo_ismapped():
+                self.explain_btn.pack(fill="x", pady=(8, 0))
             self.hint_panel.outer.pack_forget()     # hints are only for the bit-count puzzle
             self.next_btn.pack(fill="x", pady=(12, 0))
         self.score_lbl.config(text=self._score_text())
@@ -519,7 +588,8 @@ class Level1Screen(tk.Frame):
             self.canvas.draw_idle()
             return
 
-        palette = [C["cyan"], C["amber"], C["good"], "#d2a8ff", "#ff9b6b", "#7ee0e6"]
+        palette = [C["cyan"], C["amber"], C["good"], "#d2a8ff", "#ff9b6b",
+                   "#7ee0e6", "#ff6fae", "#b8f35a", "#6f8cff", "#e8e8e8"]   # one per batch
         x = np.arange(1, len(t) + 1)
         for b in np.unique(self.batch_ids):
             m = self.batch_ids == b
@@ -530,9 +600,10 @@ class Level1Screen(tk.Frame):
         a1.set_xlim(0, max(len(t) + 1, g.MIN_RUNS))
         pad = max(3 * g.JITTER_SIGMA_US, 1)
         a1.set_ylim(t.mean() - 1.6 * pad, t.mean() + 1.6 * pad)
-        leg = a1.legend(loc="upper right", fontsize=7, facecolor=C["panel2"],
-                        edgecolor=C["border"], labelcolor=C["text"], ncol=4)
-        leg.get_frame().set_alpha(0.95)
+        if self.show_key:
+            leg = a1.legend(loc="upper right", fontsize=7, facecolor=C["panel2"],
+                            edgecolor=C["border"], labelcolor=C["text"], ncol=4)
+            leg.get_frame().set_alpha(0.95)
 
         bins = max(10, min(30, len(t) // 4))
         a2.hist(t, bins=bins, color=C["cyan"], edgecolor=C["inset"], linewidth=1)
@@ -543,6 +614,87 @@ class Level1Screen(tk.Frame):
         a2.text(mean, a2.get_ylim()[1] * 0.92, "  mean = %s µs" % format(mean, ",.1f"),
                 color=C["warn"], fontsize=8, va="top")
         self.canvas.draw_idle()
+
+    # ------------------------------------------------- lab: answer + explanation
+    def _close_modal(self):
+        if self._modal_close is not None:
+            self._modal_close()
+
+    def _modal(self, label, title, width=640):
+        """Overlay with a centred card on top of the current view.
+        Returns (body_frame, close_fn)."""
+        self.end_tour()
+        self._close_modal()
+        shade = tk.Frame(self.stage, bg=C["inset"])
+        shade.place(x=0, y=0, relwidth=1, relheight=1)
+        box = tk.Frame(shade, bg=C["amber"])
+        box.place(relx=0.5, rely=0.5, anchor="center", width=px(width))
+        inner = tk.Frame(box, bg=C["panel2"])
+        inner.pack(fill="both", expand=True, padx=3, pady=3)
+        body = tk.Frame(inner, bg=C["panel2"])
+        body.pack(fill="both", expand=True, padx=24, pady=18)
+        tk.Label(body, text=label, bg=C["panel2"], fg=C["amber"],
+                 font=self.F["label"]).pack(anchor="w")
+        tk.Label(body, text=title, bg=C["panel2"], fg=C["text"],
+                 font=self.F["h1"]).pack(anchor="w", pady=(2, 10))
+
+        def close():
+            self._modal_close = None
+            try:
+                self.root.unbind("<Escape>")
+                shade.destroy()
+            except tk.TclError:
+                pass
+        self._modal_close = close
+        self.root.bind("<Escape>", lambda e: close())
+        return body, close
+
+    def show_explanation(self):
+        """The correct bit count and how to get it from the player's own data."""
+        if not self.bits_done:
+            return
+        F = self.F
+        k = self.sim.ones
+        solved = self.bit_points > 0
+        body, close = self._modal("THE ANSWER", "The key has %d one-bits" % k)
+        W = px(590)
+
+        def para(text, color=C["text"], fnt=None, pady=(0, 8)):
+            tk.Label(body, text=text, bg=C["panel2"], fg=color, font=fnt or F["small"],
+                     wraplength=W, justify="left", anchor="w").pack(fill="x", pady=pady)
+
+        if self.guesses:
+            para("Your answers: %s" % ", ".join(str(x) for x in self.guesses)
+                 + ("" if solved else "   -   Correct answer: %d" % k),
+                 C["good"] if solved else C["bad"], F["smallb"])
+
+        squares = g.KEY_BITS * g.T_S_US
+        para("Why: every run does 16 squares. Each 1 bit adds one multiply, so the "
+             "total time grows by one multiply time for every 1 bit:")
+        para("T = 16 × t_S + (number of 1 bits) × t_M + jitter\n"
+             "T = 16 × %.0f + %d × %.0f = %s µs  (without jitter)"
+             % (g.T_S_US, k, g.T_M_US, format(squares + k * g.T_M_US, ",.0f")),
+             C["warn"], F["smallb"])
+
+        if len(self.times):
+            m = self.times.mean()
+            est = (m - squares) / g.T_M_US
+            para("Working it out from YOUR measurements:", C["muted"], F["smallb"],
+                 pady=(2, 2))
+            para("1. Mean of your %d runs          = %s µs\n"
+                 "2. Subtract 16 squares (16 × %.0f) = %s µs\n"
+                 "3. Divide by one multiply (%.0f)   = %.2f\n"
+                 "4. Round to a whole number         = %d"
+                 % (len(self.times), format(m, ",.1f"), g.T_S_US,
+                    format(m - squares, ",.1f"), g.T_M_US, est, round(est)))
+            if round(est) != k:
+                para("Your mean was still too noisy to land on the right number. "
+                     "More runs would have pulled the mean closer to the true value.",
+                     C["muted"])
+        para("A single run is off by about ±1 multiply because of jitter, which is why "
+             "you have to average many runs. Timing tells you HOW MANY bits are 1, "
+             "but not WHERE they are.", pady=(2, 12))
+        RetroButton(body, "GOT IT", close, font=F["btn"]).pack(anchor="e")
 
     # =========================================================================
     # View 2: short answer
