@@ -55,6 +55,7 @@ T_M_US = 1.5 * T_S_US          # time of one multiply (told to student as 1.5 * 
 JITTER_SIGMA_US = 0.5 * T_M_US  # run-to-run jitter, ~ +/- one multiply per run
 MIN_RUNS, MAX_RUNS = 20, 50
 MAX_ATTEMPTS = 3
+MAX_BATCHES = 10               # most batches a student may run (one legend colour each)
 
 
 def seed_for(student_id: str, level: str = "level1") -> int:
@@ -142,6 +143,12 @@ HINTS = [
     "left by the time of one multiply. Round to the nearest whole number.",
 ]
 HINT_LOCKED_UNTIL_WRONG = 2  # index of the hint that needs a wrong attempt first
+
+
+def hint_unlocked(index: int, wrong_attempts: int) -> bool:
+    """Used by the retro Level 1 screen: hint 1 (index 0) is open from the start,
+    and each further hint needs one more wrong attempt (hint 2 after 1, hint 3 after 2)."""
+    return wrong_attempts >= index
 
 
 def _sentences(text: str) -> list[str]:
