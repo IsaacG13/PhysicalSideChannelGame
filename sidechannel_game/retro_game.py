@@ -77,9 +77,9 @@ class App:
     def fail_message(self, level_id, new_seed=None):
         """Menu message after a failed level (shown instead of 'UNLOCKED!')."""
         from progress import level_name
-        text = "SCORE HIGHER ON %s TO PROCEED. TRY AGAIN!" % level_name(level_id)
+        text = "SCORE HIGHER ON %s TO PROCEED!\n" % level_name(level_id)
         if new_seed:
-            text += " YOUR SEED HAS BEEN REDONE."
+            text += "YOUR TAMPERING HAS CAUSED THE SEED TO SCRAMBLE!."
         return text
 
     def show_seed(self, first_time):
