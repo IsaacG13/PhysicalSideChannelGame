@@ -162,8 +162,9 @@ def hint_unlocked(index: int, wrong_attempts: int) -> bool:
     return wrong_attempts >= index
 
 
-def _sentences(text: str) -> list[str]:
+def _sentences(text: str, rx: dict | None = None) -> list[str]:
     """Split into sentences, dropping fragments that look like keyword lists."""
+    rx = _RX if rx is None else rx
     parts = re.split(r"(?<=[.!?;])\s+|\n+", text.strip())
     keep = []
     for p in parts:
@@ -171,20 +172,27 @@ def _sentences(text: str) -> list[str]:
         if len(words) < 6:
             continue
         hits = sum(1 for w in words if any(r.fullmatch(w) or r.search(f" {w} ")
-                                           for r in _RX.values()))
+                                           for r in rx.values()))
         if hits / len(words) <= 0.5:  # mostly real prose, not stuffed keywords
             keep.append(p)
     return keep
 
 
-def score_short_answer(text: str) -> list[tuple[str, bool, str, str]]:
-    """Return [(rubric_id, met, description, hint), ...]."""
-    sents = _sentences(text)
+def score_with_rubric(text: str, rubric, rx: dict) -> list[tuple[str, bool, str, str]]:
+    """Score `text` against any rubric [(id, needs, description, hint), ...].
+    An item is met when ONE real sentence matches every pattern in `needs`
+    (keys of `rx`). Also used by Levels 2 and 3 (power_rules.py)."""
+    sents = _sentences(text, rx)
     out = []
-    for rid, needs, desc, hint in RUBRIC:
-        met = any(all(_RX[n].search(s) for n in needs) for s in sents)
+    for rid, needs, desc, hint in rubric:
+        met = any(all(rx[n].search(s) for n in needs) for s in sents)
         out.append((rid, met, desc, hint))
     return out
+
+
+def score_short_answer(text: str) -> list[tuple[str, bool, str, str]]:
+    """Level 1: return [(rubric_id, met, description, hint), ...]."""
+    return score_with_rubric(text, RUBRIC, _RX)
 
 
 # =============================================================================

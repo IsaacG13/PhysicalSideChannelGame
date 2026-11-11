@@ -9,8 +9,8 @@ power it draws.
 |---|---|---|
 | Introduction | What side channels and leakage are (reading + true/false checks) | Playable |
 | Level 1: Timing | Count the 1 bits of a square-and-multiply key from execution times | Playable |
-| Level 2: SPA | Simple power analysis | Coming soon |
-| Level 3: SPA Advanced | Noisy traces, averaging, a protected lock | Coming soon |
+| Level 2: SPA | Read all 16 key bits from one power trace | Prototype (playable, in development) |
+| Level 3: SPA Advanced | Average noisy traces; compare with a protected lock | Prototype (playable, in development) |
 | Review | Wrap-up | Coming soon |
 
 ## Quick start
@@ -61,7 +61,7 @@ automatically.
 - **Unlocking:** each level unlocks when the level above it is **passed**.
 - **Scoring:** a level is passed with **70% or more** of its points.
   - Introduction: 5 points per true/false question (10 in total).
-  - Level 1: 3 / 2 / 1 points for the 1-bit count (attempt 1 / 2 / 3) plus 7 points
+  - Levels 1-3: 3 / 2 / 1 points for the answer (attempt 1 / 2 / 3) plus 7 points
     for the written explanation (10 in total).
 - **Failing:** below 70% the level must be played again. Failing a level that uses
   the seed's data (Level 1 onwards) also gives you a **new seed**, so the key can't
@@ -100,8 +100,9 @@ All code lives in `sidechannel_game/`:
 | `screen_intro.py`, `intro_content.py` | Introduction screens; the text lives in `intro_content.py` |
 | `screen_level1.py` | Level 1 (timing attack) screens |
 | `game_with_hints.py` | Level 1 simulation, hints and short-answer scoring |
+| `screen_power.py`, `power_rules.py` | Levels 2 and 3 (prototypes): screens, and their text, hints and rubric |
 | `config.py` | Tunable numbers: key, timing jitter, batch sizes, attempts, power-trace model |
-| `sim.py` | Power-trace model for Levels 2 and 3 (not playable yet) |
+| `sim.py` | Power-trace model for Levels 2 and 3 |
 | `progress.py` | Save file, scores, pass mark, unlocking |
 | `audio.py`, `assets/sounds/` | Sound effects and background music |
 | `retro.py`, `pixelfont.py`, `scene_art.py` | Colours, fonts, widgets and pixel art |
