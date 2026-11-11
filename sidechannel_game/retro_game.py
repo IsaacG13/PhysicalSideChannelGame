@@ -15,6 +15,7 @@ Files
     retro_game.py     this file: window + moving between screens
     screen_menu.py    main menu          screen_seed.py   seed entry
     screen_intro.py   introduction       screen_level1.py Level 1 (timing)
+    screen_power.py   Levels 2 and 3 (power traces, PROTOTYPES; rules in power_rules.py)
     intro_content.py  the text of the introduction (easy to edit)
     game_with_hints.py  Level 1 simulation, hints and scoring (reused as-is)
     retro.py          colours, fonts, widgets      pixelfont.py, scene_art.py  pixel art
@@ -102,6 +103,12 @@ class App:
         elif level_id == "level1":
             from screen_level1 import Level1Screen
             self._swap(lambda parent: Level1Screen(parent, self))
+        elif level_id == "level2":              # prototype
+            from screen_power import Level2Screen
+            self._swap(lambda parent: Level2Screen(parent, self))
+        elif level_id == "level3":              # prototype
+            from screen_power import Level3Screen
+            self._swap(lambda parent: Level3Screen(parent, self))
         else:                                   # levels not built yet
             if hasattr(self.screen, "say"):
                 self.screen.say("COMING SOON")

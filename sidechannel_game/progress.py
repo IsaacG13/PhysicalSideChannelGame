@@ -42,7 +42,11 @@ LEVEL_IDS = [lid for lid, _ in LEVELS]
 # the "0/0" placeholder everywhere.
 SHOW_REAL_SCORES = True
 PLACEHOLDER_SCORE = "0/0"          # levels with no scoring yet
-MAX_SCORES = {"intro": 10, "level1": 10}   # shown as 0/N before a level is played
+MAX_SCORES = {"intro": 10, "level1": 10, "level2": 10, "level3": 10}  # 0/N before playing
+
+# Levels that are playable but still under development: the menu marks them
+# *PROTOTYPE* once they are unlocked.
+PROTOTYPE_LEVELS = ("level2", "level3")
 
 # A level is passed with at least this share of its points; below it the level
 # is failed, stays incomplete, and must be played again before the next unlocks.

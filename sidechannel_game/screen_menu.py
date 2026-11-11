@@ -23,7 +23,7 @@ import numpy as np
 import audio
 import pixelfont
 import scene_art
-from progress import LEVELS
+from progress import LEVELS, PROTOTYPE_LEVELS
 from retro import C, array_to_photo, rgb
 
 MIN_W, MIN_H = scene_art.SCENE_W, scene_art.SCENE_H   # smallest design size (art pixels)
@@ -189,8 +189,11 @@ class MenuScreen(tk.Frame):
             name_color, score_color = CREAM, MUTED
         pixelfont.draw_text(buf, LIST_X, y, name, name_color,
                             outline=INK if unlocked else None)
-        pixelfont.draw_text(buf, LIST_X, y + 9, "SCORE " + self.save.score_text(lid),
-                            score_color)
+        score = "SCORE " + self.save.score_text(lid)
+        pixelfont.draw_text(buf, LIST_X, y + 9, score, score_color)
+        if unlocked and lid in PROTOTYPE_LEVELS:        # playable, still in development
+            pixelfont.draw_text(buf, LIST_X + pixelfont.text_size(score)[0] + 6, y + 9,
+                                "*PROTOTYPE*", CYAN, outline=INK)
 
         icon_x = LIST_X + name_w + 6
         if not unlocked:
