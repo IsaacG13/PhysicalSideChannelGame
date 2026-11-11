@@ -46,7 +46,10 @@ On macOS and Linux use `python3` instead of `python`.
   ```
 
 pygame is only used for sound. Without it (or without a sound device) the game
-runs silently.
+runs silently, and the terminal shows a line starting with `[audio] Sound is OFF`
+that says why. If pygame is missing, install it for the same Python that runs the
+game (the message prints the exact command). If `pip install pygame` fails on a very
+new Python version, try `pip install pygame-ce` instead; the game works with either.
 
 The screen is designed for 1366×768 or larger; high-DPI displays are scaled
 automatically.

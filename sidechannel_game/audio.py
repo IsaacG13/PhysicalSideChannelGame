@@ -26,13 +26,15 @@ TINKER: volumes and fade times are the constants below.
 """
 
 import os
+import sys
 import threading
 
 try:                                    # hide pygame's hello banner
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
     import pygame
-except Exception:                       # pygame not installed -> silent game
+except Exception as exc:                # pygame not installed -> silent game
     pygame = None
+    _IMPORT_ERROR = exc
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOUND_DIR = os.path.join(HERE, "assets", "sounds")
@@ -57,11 +59,19 @@ _state = {
 }
 
 
+def _warn(reason):
+    """Say in the terminal why the game is silent (it keeps running)."""
+    print("[audio] Sound is OFF: %s" % reason, file=sys.stderr)
+
+
 def init(root, save):
     """Start the mixer, load the sound effects and, if the MUSIC setting is
     on, start the background track. Safe to call when pygame is missing."""
     _state["root"], _state["save"] = root, save
     if pygame is None:
+        _warn("pygame is not installed for this Python (%s).\n"
+              "        Install it with:  \"%s\" -m pip install pygame"
+              % (_IMPORT_ERROR, sys.executable))
         return
     try:
         pygame.mixer.init()
@@ -70,10 +80,12 @@ def init(root, save):
             snd.set_volume(SFX_VOLUME.get(name, 0.7))
             _state["sounds"][name] = snd
         pygame.mixer.music.load(os.path.join(SOUND_DIR, MUSIC_FILE))
-    except Exception:                   # no audio device / missing file
+    except Exception as exc:            # no audio device / missing file
         _state["ready"] = False
+        _warn("could not start audio (%s: %s)" % (type(exc).__name__, exc))
         return
     _state["ready"] = True
+    print("[audio] Sound is ON (pygame %s)" % pygame.version.ver, file=sys.stderr)
     # Measuring the track length means decoding it, which takes a moment:
     # do it in the background so the window opens straight away.
     threading.Thread(target=_measure_music, daemon=True).start()
