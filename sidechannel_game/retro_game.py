@@ -63,11 +63,20 @@ class App:
         self.screen = make_screen(self.container)
         self.screen.pack(fill="both", expand=True)
 
-    def show_menu(self, message=None):
+    def show_menu(self, message=None, seconds=3.5):
         from screen_menu import MenuScreen
         self._swap(lambda parent: MenuScreen(parent, self))
         if message:
-            self.root.after(150, lambda: self.screen.say(message, 3.5))
+            screen = self.screen
+            self.root.after(150, lambda: screen.winfo_exists() and screen.say(message, seconds))
+
+    def fail_message(self, level_id, new_seed=None):
+        """Menu message after a failed level (shown instead of 'UNLOCKED!')."""
+        from progress import level_name
+        text = "SCORE HIGHER ON %s TO PROCEED. TRY AGAIN!" % level_name(level_id)
+        if new_seed:
+            text += " YOUR SEED HAS BEEN REDONE."
+        return text
 
     def show_seed(self, first_time):
         from screen_seed import SeedScreen

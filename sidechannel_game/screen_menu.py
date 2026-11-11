@@ -33,7 +33,8 @@ TITLE_Y1, TITLE_Y2 = 10, 36
 LIST_X = 24                  # where level names start
 LIST_Y = 66                  # y of the first level name
 LIST_PITCH = 19              # vertical distance between levels
-MESSAGE_Y = 162
+MESSAGE_Y = 161
+MESSAGE_MAX_W = 196          # long messages wrap so they stay clear of the board art
 BOTTOM_FROM_EDGE = 11        # the SEED / NEW GAME row sits this far above the bottom
 
 # --- colours -------------------------------------------------------------------
@@ -143,8 +144,11 @@ class MenuScreen(tk.Frame):
         # transient message line
         now = time.time()
         if self.message and now < self.message_until:
-            pixelfont.draw_text(buf, LIST_X - 12, MESSAGE_Y, self.message, AMBER_HI,
-                                outline=INK)
+            lines = self._wrap(self.message)
+            y = min(MESSAGE_Y, bottom_y - 3 - 9 * len(lines))   # never over the seed row
+            for line in lines:
+                pixelfont.draw_text(buf, LIST_X - 12, y, line, AMBER_HI, outline=INK)
+                y += 9
         # bottom bar: seed + new game
         seed_text = "SEED " + str(self.save.seed or "-")
         pixelfont.draw_text(buf, 12, bottom_y, seed_text, MUTED, outline=INK)
@@ -292,9 +296,22 @@ class MenuScreen(tk.Frame):
     def _activate(self, index):
         lid, name = LEVELS[index]
         if not self.save.is_unlocked(lid):
-            self.say("LOCKED: FINISH THE LEVEL ABOVE")
+            self.say("LOCKED: PASS THE LEVEL ABOVE")
             return
         self.app.open_level(lid)
+
+    @staticmethod
+    def _wrap(text):
+        """Split a message into lines no wider than MESSAGE_MAX_W."""
+        lines, cur = [], ""
+        for word in text.split():
+            trial = (cur + " " + word).strip()
+            if cur and pixelfont.text_size(trial)[0] > MESSAGE_MAX_W:
+                lines.append(cur)
+                cur = word
+            else:
+                cur = trial
+        return lines + [cur] if cur else lines
 
     def say(self, text, seconds=2.5):
         """Show a short message under the level list."""

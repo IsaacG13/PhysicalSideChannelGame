@@ -132,6 +132,11 @@ RUBRIC = [
 ]
 
 
+# Points per rubric item in the retro Level 1 screen (explanation worth 7 in total).
+RUBRIC_POINTS = {"R1": 3, "R2a": 2, "R2b": 2}
+SA_MAX_POINTS = sum(RUBRIC_POINTS.values())
+
+
 # Progressive hints for the bit-count puzzle. The last one only unlocks after a
 # wrong attempt, so a student can't skip straight to the method.
 HINTS = [

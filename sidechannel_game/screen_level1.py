@@ -26,12 +26,15 @@ The player's seed picks the key: TimingSimulator is seeded with the saved seed.
 Saving (progress.py)
   * after every bit-count submission the attempts used are saved, so leaving
     and coming back cannot reset the "3 attempts" limit
-  * the level counts as completed when the written explanation is submitted
+  * the level is scored when the written explanation is submitted:
+      bit count 3 / 2 / 1 points (attempt 1 / 2 / 3), explanation 7 points
+      (g.RUBRIC_POINTS), 10 in total
+  * 70% or more (progress.PASS_FRACTION) passes and unlocks Level 2; less
+    fails the level: the player gets a NEW seed (new key) and must replay it
   * a completed level can be replayed as PRACTICE; practice never changes the
     saved record or score
 
-Scores are kept in the save file (score / max_score) but the main menu still
-shows the 0/0 placeholder - see progress.py (SHOW_REAL_SCORES).
+Scores are kept in the save file (score / max_score) and shown on the menu.
 
 TINKER: layout numbers (column widths, paddings) are near the top of
 show_lab(). Tour text is in _tour_steps().
@@ -44,10 +47,12 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 import game_with_hints as g
+import progress
 import retro
 from retro import C, Pips, RetroButton, font, panel, px, style_axes, topbar
 
-MAX_SCORE = 6               # 3 points for the bit count + 3 for the explanation
+BIT_MAX = g.points_for_attempt(1)            # 3 points for the bit count
+MAX_SCORE = BIT_MAX + g.SA_MAX_POINTS        # + 7 for the explanation = 10
 COL_W_BASE = 290            # width of the left and right columns (96-DPI pixels)
 
 
@@ -743,22 +748,29 @@ class Level1Screen(tk.Frame):
         self.sa_submit.set_enabled(False)
         self.answer.config(state="disabled", fg=C["muted"])
         results = g.score_short_answer(text)
-        self.sa_points = sum(1 for r in results if r[1])
+        self.sa_points = sum(g.RUBRIC_POINTS[rid] for rid, met, _, _ in results if met)
         self.score_lbl.config(text=self._score_text())
-        if not self.practice:                        # the level is now complete
-            self.save.mark_complete(
-                "level1", attempt=self.attempt, bits_done=True, bit_points=self.bit_points,
-                sa_points=self.sa_points, score=self.bit_points + self.sa_points,
-                max_score=MAX_SCORE, answer=text)
+        score = self.bit_points + self.sa_points
+        self.passed = progress.passed(score, MAX_SCORE)
+        self.new_seed = None
+        if not self.practice:                        # the level is now scored
+            if self.passed:
+                self.save.mark_complete(
+                    "level1", attempt=self.attempt, bits_done=True,
+                    bit_points=self.bit_points, sa_points=self.sa_points, score=score,
+                    max_score=MAX_SCORE, answer=text)
+            else:                                    # failed: new seed, replay needed
+                self.new_seed = self.save.fail_level("level1", score, MAX_SCORE)
 
-        tk.Label(self.sa_result, text="Rubric check: %d / %d" % (self.sa_points, len(results)),
+        tk.Label(self.sa_result, text="Explanation: %d / %d points"
+                 % (self.sa_points, g.SA_MAX_POINTS),
                  bg=C["panel"], fg=C["text"], font=F["h2"]).pack(anchor="w", pady=(0, 6))
-        for _, met, desc, hint in results:
+        for rid, met, desc, hint in results:
             row = tk.Frame(self.sa_result, bg=C["panel"])
             row.pack(fill="x", pady=2)
-            tk.Label(row, text="[OK]" if met else "[ X]", bg=C["panel"],
-                     fg=C["good"] if met else C["bad"], font=F["bodyb"]).pack(side="left",
-                                                                             padx=(0, 8))
+            tk.Label(row, text="[+%d]" % (g.RUBRIC_POINTS[rid] if met else 0),
+                     bg=C["panel"], fg=C["good"] if met else C["bad"],
+                     font=F["bodyb"]).pack(side="left", padx=(0, 8))
             tk.Label(row, text=desc if met else "Missing - hint: %s" % hint, bg=C["panel"],
                      fg=C["text"] if met else C["muted"], font=F["body"], anchor="w",
                      justify="left", wraplength=px(960)).pack(side="left", fill="x")
@@ -771,17 +783,22 @@ class Level1Screen(tk.Frame):
     def show_results(self):
         self._clear()
         F = self.F
-        self._title("Level complete")
+        passed = getattr(self, "passed", True)
+        total = self.bit_points + self.sa_points
+        self._title("Level complete" if passed else "Level failed")
         self.help_btn.pack_forget()
         wrap = tk.Frame(self.stage, bg=C["bg"])
         wrap.pack(fill="both", expand=True, padx=24, pady=(0, 20))
 
         top = tk.Frame(wrap, bg=C["bg"])
         top.pack(fill="x")
-        cards = [("Bit count", "%d / 3" % self.bit_points,
+        need = int(-(-progress.PASS_FRACTION * MAX_SCORE // 1))      # 7 of 10
+        cards = [("Bit count", "%d / %d" % (self.bit_points, BIT_MAX),
                   "solved on attempt %d" % self.attempt if self.bit_points else "not solved"),
-                 ("Explanation", "%d / 3" % self.sa_points, "rubric points 1 & 2"),
-                 ("Level total", "%d / %d" % (self.bit_points + self.sa_points, MAX_SCORE), "")]
+                 ("Explanation", "%d / %d" % (self.sa_points, g.SA_MAX_POINTS),
+                  "rubric points 1 & 2"),
+                 ("Level total", "%d / %d" % (total, MAX_SCORE),
+                  "PASSED" if passed else "FAILED - %d needed to pass" % need)]
         for i, (title, val, sub) in enumerate(cards):
             outer = tk.Frame(top, bg=C["border"])
             outer.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 12, 0))
@@ -792,8 +809,21 @@ class Level1Screen(tk.Frame):
                      font=F["label"]).pack(anchor="w", padx=16, pady=(12, 0))
             tk.Label(inner, text=val, bg=C["panel"], fg=C["amber"] if i == 2 else C["text"],
                      font=F["big"]).pack(anchor="w", padx=16)
-            tk.Label(inner, text=sub, bg=C["panel"], fg=C["muted"],
+            sub_fg = C["muted"] if i < 2 else (C["good"] if passed else C["bad"])
+            tk.Label(inner, text=sub, bg=C["panel"], fg=sub_fg,
                      font=F["small"]).pack(anchor="w", padx=16, pady=(0, 12))
+
+        if not passed:
+            fail = panel(wrap, "Level failed", F, fill="x", pady=(16, 0), accent="bad")
+            note = ("You need at least %d of %d points to pass. Score higher on "
+                    "Level 1 to unlock Level 2." % (need, MAX_SCORE))
+            if self.new_seed:
+                note += (" Your seed has been redone (new seed: %s), so the lock now "
+                         "has a different key - measure again from scratch." % self.new_seed)
+            elif self.practice:
+                note += " (Practice run: your record was not changed.)"
+            tk.Label(fail, text=note, bg=C["panel"], fg=C["text"], font=F["body"],
+                     justify="left", wraplength=px(1060)).pack(anchor="w")
 
         k = self.sim.ones
         reveal = panel(wrap, "What you learned about the key", F, fill="x", pady=(16, 0))
@@ -818,10 +848,14 @@ class Level1Screen(tk.Frame):
 
         btns = tk.Frame(wrap, bg=C["bg"])
         btns.pack(fill="x", pady=(16, 0))
-        first_time = not self.practice
-        RetroButton(btns, "BACK TO MENU",
-                    lambda: self.app.show_menu(message="LEVEL 2 UNLOCKED!" if first_time else None),
-                    font=F["btn"]).pack(side="right")
+        if self.practice:
+            back = lambda: self.app.show_menu()
+        elif passed:
+            back = lambda: self.app.show_menu(message="LEVEL 2 UNLOCKED!")
+        else:
+            back = lambda: self.app.show_menu(
+                message=self.app.fail_message("level1", self.new_seed), seconds=6)
+        RetroButton(btns, "BACK TO MENU", back, font=F["btn"]).pack(side="right")
 
     def destroy(self):
         self.end_tour()
