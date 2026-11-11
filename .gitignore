@@ -1,0 +1,18 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Local save files (the game falls back to a save.json next to the code)
+sidechannel_game/save.json
+*.json.bak
+*.tmp
+
+# OS / editor clutter
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -17,9 +17,13 @@ Lab rules (numbers live in game_with_hints.py):
     not use up an attempt
   * hint 1 is open from the start; hint 2 unlocks after 1 wrong attempt, hint 3
     after 2 (g.hint_unlocked)
-  * once the bit-count puzzle is over, "Show correct answer & explanation"
-    opens a card with the answer worked out from the player's own measurements
-    (it opens by itself after the last wrong attempt)
+  * once the bit-count puzzle is over, "See the answer" shows the correct
+    count. The full explanation (WHY timing works, worked out from the player's
+    own measurements) only unlocks after the written explanation is submitted,
+    so it can't be copied into the short answer.
+  * RESTART (top bar) starts over. In a scored run where an attempt was
+    already used, restarting gives a NEW seed, so it can't be used to brute-force
+    the key. The short-answer view has a BACK button to return to the lab.
 
 The player's seed picks the key: TimingSimulator is seeded with the saved seed.
 
@@ -46,6 +50,7 @@ import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
+import audio
 import game_with_hints as g
 import progress
 import retro
@@ -72,6 +77,8 @@ class Level1Screen(tk.Frame):
         self.bit_points = 0
         self.sa_points = 0
         self.bits_done = False
+        self.sa_done = False                       # written explanation submitted?
+        self.answer_draft = ""                     # kept when going back to the lab
         self.hints_shown = 0
         self.guesses = []                          # every number submitted, in order
         self.show_key = not self.save.flag("level1_hide_key")
@@ -87,9 +94,14 @@ class Level1Screen(tk.Frame):
 
         # --- frame: top bar + a stage that is swapped between views ------------
         self.bar, right = topbar(self, self.F, "LEVEL 1  -  TIMING ATTACK", "", self.app.show_menu)
-        self.help_btn = RetroButton(self.bar, "?  HOW TO PLAY", self.start_tour,
+        tools = tk.Frame(self.bar, bg=C["bg"])
+        tools.pack(side="right", padx=(0, 14))
+        self.restart_btn = RetroButton(tools, "RESTART", self.confirm_restart,
+                                       kind="secondary", font=self.F["smallb"])
+        self.restart_btn.grid(row=0, column=0, padx=(0, 8))
+        self.help_btn = RetroButton(tools, "?  HOW TO PLAY", self.start_tour,
                                     kind="secondary", font=self.F["smallb"])
-        self.help_btn.pack(side="right", padx=(0, 20))
+        self.help_btn.grid(row=0, column=1)
         self.score_lbl = tk.Label(right, text="", bg=C["bg"], fg=C["text"], font=self.F["bodyb"])
         self.score_lbl.pack(anchor="e")
         sub = "PRACTICE: SCORE NOT RECORDED" if self.practice else "SEED %s" % self.save.seed
@@ -124,8 +136,9 @@ class Level1Screen(tk.Frame):
         self._clear()
         F = self.F
         COL_W = px(COL_W_BASE)
-        self._title("Count the 1 bits in the lock's secret key")
-        self.help_btn.pack(side="right", padx=(0, 20))
+        self._title("Count the 1 bits in the secret key")
+        self.help_btn.grid()
+        self.restart_btn.grid()
         self.score_lbl.config(text=self._score_text())
 
         body = tk.Frame(self.stage, bg=C["bg"])
@@ -207,7 +220,7 @@ class Level1Screen(tk.Frame):
                  font=F["stat"]).pack(side="left")
         self.guess.bind("<Return>", lambda e: self.submit_bits())
 
-        self.submit_btn = RetroButton(sub, "SUBMIT ANSWER", self.submit_bits, kind="blue",
+        self.submit_btn = RetroButton(sub, "SUBMIT ANSWER", self.submit_bits, kind="blue", sound=None,
                                       font=F["btn"])
         self.submit_btn.pack(fill="x")
         att = tk.Frame(sub, bg=C["panel"])
@@ -495,24 +508,25 @@ class Level1Screen(tk.Frame):
             if not 0 <= guess <= g.KEY_BITS:
                 raise ValueError
         except ValueError:
+            audio.play("wrong")
             self.feedback.config(text="Enter a whole number from 0 to %d." % g.KEY_BITS,
                                  fg=C["warn"])
             return
         if guess in self.guesses:                   # same wrong answer again: no attempt used
+            audio.play("wrong")
             self.feedback.config(fg=C["warn"],
                                  text="Already tried %d - not counted. Pick another number."
                                       % guess)
             return
         self.attempt += 1
         self.guesses.append(guess)
-        failed = False
+        audio.play("correct" if guess == self.sim.ones else "wrong")
         if guess == self.sim.ones:
             self.bit_points = g.points_for_attempt(self.attempt)
             self.bits_done = True
             self.feedback.config(fg=C["good"], text="CORRECT!  +%d points" % self.bit_points)
         elif self.attempt >= g.MAX_ATTEMPTS:
             self.bits_done = True
-            failed = True
             self.feedback.config(fg=C["bad"], text="INCORRECT. No attempts left.")
         else:
             msg = "INCORRECT. Try again."
@@ -553,8 +567,8 @@ class Level1Screen(tk.Frame):
                     text=("CORRECT!  +%d points" % self.bit_points) if self.bit_points
                     else "INCORRECT. No attempts left.")
             self.guess.config(state="disabled")
-            self.explain_btn.config(text="SEE EXPLANATION" if self.bit_points
-                                    else "ANSWER & EXPLANATION")
+            self.explain_btn.config(text="SEE EXPLANATION" if self.sa_done
+                                    else "SEE THE ANSWER")
             if not self.explain_btn.winfo_ismapped():
                 self.explain_btn.pack(fill="x", pady=(8, 0))
             self.hint_panel.outer.pack_forget()     # hints are only for the bit-count puzzle
@@ -671,6 +685,15 @@ class Level1Screen(tk.Frame):
                  + ("" if solved else "   -   Correct answer: %d" % k),
                  C["good"] if solved else C["bad"], F["smallb"])
 
+        if not self.sa_done:
+            # Before the written explanation is in, only the number is shown: the
+            # reasoning would otherwise be copied straight into the short answer.
+            para("The full explanation - why timing reveals this, worked out from "
+                 "your own measurements - unlocks after you submit your written "
+                 "explanation.", C["muted"], pady=(2, 12))
+            RetroButton(body, "GOT IT", close, font=F["btn"]).pack(anchor="e")
+            return
+
         squares = g.KEY_BITS * g.T_S_US
         para("Why: every run does 16 squares. Each 1 bit adds one multiply, so the "
              "total time grows by one multiply time for every 1 bit:")
@@ -699,6 +722,44 @@ class Level1Screen(tk.Frame):
              "but not WHERE they are.", pady=(2, 12))
         RetroButton(body, "GOT IT", close, font=F["btn"]).pack(anchor="e")
 
+    # ------------------------------------------------------ restart / back
+    def back_to_lab(self):
+        """Short answer -> lab, keeping the draft and all measurements."""
+        try:
+            self.answer_draft = self.answer.get("1.0", "end").rstrip("\n")
+        except (tk.TclError, AttributeError):
+            pass
+        self.show_lab()
+
+    def _restart_needs_new_seed(self):
+        return not self.practice and (self.attempt > 0 or self.bits_done)
+
+    def confirm_restart(self):
+        new_seed = self._restart_needs_new_seed()
+        body, close = self._modal("RESTART", "Restart Level 1?", width=520)
+        text = ("Your measurements, hints and written draft will be cleared.")
+        if new_seed:
+            text += (" Because you have already submitted an answer, you will get a NEW "
+                     "seed: the lock gets a different key, and your attempts start again "
+                     "from 3.")
+        elif self.practice:
+            text += " This is a practice run, so nothing in your record changes."
+        tk.Label(body, text=text, bg=C["panel2"], fg=C["text"], font=self.F["small"],
+                 wraplength=px(460), justify="left").pack(anchor="w", pady=(0, 14))
+        row = tk.Frame(body, bg=C["panel2"])
+        row.pack(fill="x")
+        RetroButton(row, "RESTART", lambda: (close(), self.restart()),
+                    font=self.F["btn"]).pack(side="right")
+        RetroButton(row, "CANCEL", close, kind="secondary",
+                    font=self.F["btn"]).pack(side="right", padx=(0, 10))
+
+    def restart(self):
+        seed = self.save.reseed() if self._restart_needs_new_seed() else None
+        self.app.open_level("level1")              # builds a fresh screen
+        if seed:
+            self.app.screen.feedback.config(
+                fg=C["warn"], text="Level restarted with a new seed (%s)." % seed)
+
     # =========================================================================
     # View 2: short answer
     # =========================================================================
@@ -706,7 +767,8 @@ class Level1Screen(tk.Frame):
         self._clear()
         F = self.F
         self._title("Explain your reasoning")
-        self.help_btn.pack_forget()
+        self.help_btn.grid_remove()
+        self.restart_btn.grid_remove() if self.sa_done else self.restart_btn.grid()
         wrap = tk.Frame(self.stage, bg=C["bg"])
         wrap.pack(fill="both", expand=True, padx=24, pady=(0, 20))
 
@@ -722,15 +784,21 @@ class Level1Screen(tk.Frame):
                               font=font(12), padx=12, pady=10, highlightthickness=3,
                               highlightbackground=C["border"], highlightcolor=C["amber"])
         self.answer.pack(fill="both", expand=True)
+        if self.answer_draft:
+            self.answer.insert("1.0", self.answer_draft)
         self.answer.focus_set()
 
         bottom = tk.Frame(q, bg=C["panel"])
         bottom.pack(fill="x", pady=(10, 0))
-        self.wc = tk.Label(bottom, text="0 words", bg=C["panel"], fg=C["muted"], font=F["small"])
+        self.wc = tk.Label(bottom, text="%d words" % len(self.answer_draft.split()),
+                           bg=C["panel"], fg=C["muted"], font=F["small"])
         self.wc.pack(side="left")
         self.sa_submit = RetroButton(bottom, "SUBMIT EXPLANATION", self.submit_answer,
-                                     kind="blue", font=F["btn"])
+                                     kind="blue", font=F["btn"], sound=None)
         self.sa_submit.pack(side="right")
+        self.sa_back = RetroButton(bottom, "< BACK TO LAB", self.back_to_lab,
+                                   kind="secondary", font=F["btn"])
+        self.sa_back.pack(side="right", padx=(0, 10))
         self.answer.bind("<KeyRelease>", lambda e: self.wc.config(
             text="%d words" % len(self.answer.get("1.0", "end").split()), fg=C["muted"]))
         self.sa_result = tk.Frame(q, bg=C["panel"])
@@ -739,17 +807,23 @@ class Level1Screen(tk.Frame):
     def submit_answer(self):
         text = self.answer.get("1.0", "end").strip()
         if len(text.split()) < 12:
+            audio.play("wrong")
             self.wc.config(text="Please write at least a couple of full sentences.",
                            fg=C["warn"])
             return
         F = self.F
+        self.sa_done = True
+        self.answer_draft = ""
         self.sa_submit.set_enabled(False)
+        self.sa_back.pack_forget()
+        self.restart_btn.grid_remove()
         self.answer.config(state="disabled", fg=C["muted"])
         results = g.score_short_answer(text)
         self.sa_points = sum(g.RUBRIC_POINTS[rid] for rid, met, _, _ in results if met)
         self.score_lbl.config(text=self._score_text())
         score = self.bit_points + self.sa_points
         self.passed = progress.passed(score, MAX_SCORE)
+        audio.play("correct" if self.passed else "wrong")
         self.new_seed = None
         if not self.practice:                        # the level is now scored
             if self.passed:
@@ -772,8 +846,12 @@ class Level1Screen(tk.Frame):
             tk.Label(row, text=desc if met else "Missing - hint: %s" % hint, bg=C["panel"],
                      fg=C["text"] if met else C["muted"], font=F["body"], anchor="w",
                      justify="left", wraplength=px(960)).pack(side="left", fill="x")
-        RetroButton(self.sa_result, "FINISH LEVEL >", self.show_results,
-                    font=F["btn"]).pack(anchor="e", pady=(10, 0))
+        row = tk.Frame(self.sa_result, bg=C["panel"])
+        row.pack(fill="x", pady=(10, 0))
+        RetroButton(row, "FINISH LEVEL >", self.show_results,
+                    font=F["btn"]).pack(side="right")
+        RetroButton(row, "SEE FULL EXPLANATION", self.show_explanation, kind="secondary",
+                    font=F["btn"]).pack(side="right", padx=(0, 10))
 
     # =========================================================================
     # View 3: results
@@ -784,7 +862,8 @@ class Level1Screen(tk.Frame):
         passed = getattr(self, "passed", True)
         total = self.bit_points + self.sa_points
         self._title("Level complete" if passed else "Level failed")
-        self.help_btn.pack_forget()
+        self.help_btn.grid_remove()
+        self.restart_btn.grid_remove()
         wrap = tk.Frame(self.stage, bg=C["bg"])
         wrap.pack(fill="both", expand=True, padx=24, pady=(0, 20))
 
@@ -854,6 +933,8 @@ class Level1Screen(tk.Frame):
             back = lambda: self.app.show_menu(
                 message=self.app.fail_message("level1", self.new_seed), seconds=6)
         RetroButton(btns, "BACK TO MENU", back, font=F["btn"]).pack(side="right")
+        RetroButton(btns, "SEE FULL EXPLANATION", self.show_explanation, kind="secondary",
+                    font=F["btn"]).pack(side="right", padx=(0, 10))
 
     def destroy(self):
         self.end_tour()

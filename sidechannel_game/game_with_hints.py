@@ -10,15 +10,17 @@ total execution time over many runs and must infer how many key bits are 1.
 Model (from the proposal):
     T = (#S * t_S) + (#M * t_M) + jitter
     #S = 16, #M = number of 1 bits (Hamming weight of the key)
-    t_M = 1.5 * t_S,  jitter ~ N(0, sigma_j),  sigma_j = 0.5 * t_M
+    t_M = 1.5 * t_S,  jitter ~ N(0, sigma_j),  sigma_j = L1_JITTER_SIGMA_IN_TM * t_M
     Runs per batch: 20 .. 50
+    ALL of these numbers come from config.py -- change them there.
     Bit-count submission: 3 attempts, 3 / 2 / 1 points, told only correct/incorrect
     Short answer: checked against rubric points 1 & 2 (keywords in the same sentence)
 
-Run:
-    python level1_timing.py                  # asks for a student ID
-    python level1_timing.py --student-id abc  # skip the login screen
-    python level1_timing.py --protect         # Windows: block screenshots/recording
+Run (standalone Level 1 prototype; the real game is retro_game.py, which only
+imports the simulation, hints and scoring from this file):
+    python game_with_hints.py                  # asks for a student ID
+    python game_with_hints.py --student-id abc # skip the login screen
+    python game_with_hints.py --protect        # Windows: block screenshots/recording
 
 Requires: Python 3.9+, numpy, matplotlib, tkinter (bundled with Python on
 Windows/macOS; `sudo apt install python3-tk` on Debian/Ubuntu).
@@ -40,6 +42,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import matplotlib
 
+import config as cfg
+
 matplotlib.use("TkAgg")
 from matplotlib.figure import Figure  # noqa: E402
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # noqa: E402
@@ -49,13 +53,15 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # noqa: E402
 #  Simulation
 # =============================================================================
 
-KEY_BITS = 16
-T_S_US = 150.0                 # time of one square, microseconds (told to student)
-T_M_US = 1.5 * T_S_US          # time of one multiply (told to student as 1.5 * t_S)
-JITTER_SIGMA_US = 0.5 * T_M_US  # run-to-run jitter, ~ +/- one multiply per run
-MIN_RUNS, MAX_RUNS = 20, 50
-MAX_ATTEMPTS = 3
-MAX_BATCHES = 10               # most batches a student may run (one legend colour each)
+# The numbers come from config.py so there is one place to tune the game.
+KEY_BITS = cfg.KEY_BITS
+T_S_US = cfg.T_S_US                                # one square, µs (told to student)
+T_M_US = cfg.T_M_US                                # one multiply (told as 1.5 * t_S)
+JITTER_SIGMA_US = cfg.L1_JITTER_SIGMA_IN_TM * T_M_US  # run-to-run jitter
+MIN_RUNS, MAX_RUNS = cfg.L1_MIN_RUNS, cfg.L1_MAX_RUNS
+MAX_ATTEMPTS = cfg.MAX_ATTEMPTS
+MAX_BATCHES = cfg.L1_MAX_BATCHES                   # one legend colour each
+MIN_ONES, MAX_ONES = cfg.MIN_ONES, cfg.MAX_ONES
 
 
 def seed_for(student_id: str, level: str = "level1") -> int:
@@ -76,7 +82,7 @@ class TimingSimulator:
         # extremes so the answer is not guessable.
         while True:
             key = int(self.rng.integers(0, 1 << KEY_BITS)) | (1 << (KEY_BITS - 1))
-            if 4 <= bin(key).count("1") <= 12:
+            if MIN_ONES <= bin(key).count("1") <= MAX_ONES:
                 break
         self.key = key
 

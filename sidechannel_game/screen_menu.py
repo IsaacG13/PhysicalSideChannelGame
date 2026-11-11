@@ -20,6 +20,7 @@ import tkinter as tk
 
 import numpy as np
 
+import audio
 import pixelfont
 import scene_art
 from progress import LEVELS
@@ -274,9 +275,13 @@ class MenuScreen(tk.Frame):
             self.sel = key
             self._activate(key)
         elif kind == "icon":
-            self.save.toggle_setting(key)
+            on = self.save.toggle_setting(key)
+            if key == "music":
+                audio.set_music(on)
+            audio.play("click")             # silent when SOUND was just turned off
             self.render()
         elif kind == "new":
+            audio.play("click")
             if time.time() < self.confirm_until:
                 self.app.start_new_game()
             else:
@@ -296,22 +301,29 @@ class MenuScreen(tk.Frame):
     def _activate(self, index):
         lid, name = LEVELS[index]
         if not self.save.is_unlocked(lid):
+            audio.play("wrong")
             self.say("LOCKED: PASS THE PREVIOUS LEVEL FIRST")
             return
+        audio.play("click")
         self.app.open_level(lid)
 
     @staticmethod
     def _wrap(text):
-        """Split a message into lines no wider than MESSAGE_MAX_W."""
-        lines, cur = [], ""
-        for word in text.split():
-            trial = (cur + " " + word).strip()
-            if cur and pixelfont.text_size(trial)[0] > MESSAGE_MAX_W:
+        """Split a message into lines no wider than MESSAGE_MAX_W. A "\\n" in
+        the text always starts a new line."""
+        lines = []
+        for part in text.split("\n"):
+            cur = ""
+            for word in part.split():
+                trial = (cur + " " + word).strip()
+                if cur and pixelfont.text_size(trial)[0] > MESSAGE_MAX_W:
+                    lines.append(cur)
+                    cur = word
+                else:
+                    cur = trial
+            if cur:
                 lines.append(cur)
-                cur = word
-            else:
-                cur = trial
-        return lines + [cur] if cur else lines
+        return lines
 
     def say(self, text, seconds=2.5):
         """Show a short message under the level list."""

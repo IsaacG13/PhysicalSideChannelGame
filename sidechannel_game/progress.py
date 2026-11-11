@@ -189,15 +189,24 @@ class SaveData:
         and every seeded level's progress is cleared. Returns the new seed, or
         None if the seed was kept."""
         fails = int(self.level(level_id).get("fails", 0)) + 1
-        new_seed = None
-        if level_id in SEEDED_LEVELS:
-            new_seed = random_seed()
-            self.data["seed"] = new_seed
-            for lid in SEEDED_LEVELS:
-                self.data["levels"].pop(lid, None)
+        new_seed = self.reseed(save=False) if level_id in SEEDED_LEVELS else None
         self.data["levels"][level_id] = {"failed": True, "score": score,
                                          "max_score": max_score, "fails": fails}
         self.save()
+        return new_seed
+
+    def reseed(self, save=True):
+        """Give the player a new random seed (a new key) and clear the progress
+        of every seeded level. Used when a seeded level is failed or restarted
+        after an attempt. Returns the new seed."""
+        new_seed = random_seed()
+        self.data["seed"] = new_seed
+        for lid in SEEDED_LEVELS:
+            rec = self.data["levels"].pop(lid, None)
+            if rec and rec.get("completed"):     # never undo a level already passed
+                self.data["levels"][lid] = rec
+        if save:
+            self.save()
         return new_seed
 
     def score_text(self, level_id):

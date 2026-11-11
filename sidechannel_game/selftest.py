@@ -5,7 +5,8 @@ think they do, WITHOUT launching the GUI.
     python selftest.py
 
 It simulates many students (many random seeds) and reports:
-  * Level 1: how often rounding the mean timing gives the right 1-bit count
+  * Level 1: how often rounding the mean timing gives the right 1-bit count,
+    using game_with_hints.TimingSimulator -- exactly what players get
   * Level 2: how often a simple automatic decoder reads the key from ONE trace
   * Level 3: how often it reads the key from the average of N traces
   * Protected device: the same decoder should do no better than chance
@@ -16,18 +17,26 @@ The decoder here is a testing tool, not part of the game.
 import numpy as np
 
 import config as cfg
+import game_with_hints as g
 import sim
 
 STUDENTS = 300          # number of random targets to try; raise for smoother numbers
 
 
 def level1_success(n_runs: int) -> float:
+    """Share of students whose rounded mean over n_runs gives the right count.
+    Runs are collected in batches of at most MAX_RUNS, like in the game."""
     ok = 0
     for seed in range(STUDENTS):
-        t = sim.Target(seed)
-        mean_time = t.timing_runs(n_runs).mean()
-        k_est = (mean_time - cfg.KEY_BITS * cfg.T_S_MS) / cfg.T_M_MS
-        ok += t.check_count(round(k_est))
+        t = g.TimingSimulator(student_id=str(seed))
+        times = []
+        left = n_runs
+        while left > 0:                       # batches of MIN_RUNS..MAX_RUNS
+            n = min(max(left, g.MIN_RUNS), g.MAX_RUNS)
+            times.extend(t.run_batch(n)[:left])
+            left -= n
+        k_est = (np.mean(times) - g.KEY_BITS * g.T_S_US) / g.T_M_US
+        ok += round(k_est) == t.ones
     return ok / STUDENTS
 
 
@@ -67,7 +76,10 @@ if __name__ == "__main__":
     print(f"({STUDENTS} simulated students per row)\n")
 
     print("LEVEL 1 - correct 1-bit count from rounding the mean timing")
-    for n in (1, 5, cfg.L1_MIN_RUNS, 35, cfg.L1_MAX_RUNS):
+    print(f"  (jitter = {cfg.L1_JITTER_SIGMA_IN_TM} x t_M, up to "
+          f"{cfg.L1_MAX_BATCHES} batches of {cfg.L1_MIN_RUNS}-{cfg.L1_MAX_RUNS} runs)")
+    for n in (1, 5, cfg.L1_MIN_RUNS, 35, cfg.L1_MAX_RUNS, 100, 200,
+              cfg.L1_MAX_BATCHES * cfg.L1_MAX_RUNS):
         print(f"  {n:3d} runs: {level1_success(n):6.1%}")
 
     print(f"\nLEVEL 2 - full key from one trace (sigma = {cfg.L2_NOISE_SIGMA})")
