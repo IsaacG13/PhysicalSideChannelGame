@@ -18,12 +18,14 @@ Files
     intro_content.py  the text of the introduction (easy to edit)
     game_with_hints.py  Level 1 simulation, hints and scoring (reused as-is)
     retro.py          colours, fonts, widgets      pixelfont.py, scene_art.py  pixel art
+    audio.py          sound effects + music (assets/sounds/)
     progress.py       save file
 """
 
 import argparse
 import tkinter as tk
 
+import audio
 import retro
 from progress import SaveData, clean_seed
 from retro import C
@@ -42,6 +44,8 @@ class App:
         w, h = min(retro.px(1200), sw - 40), min(retro.px(760), sh - 90)
         root.geometry("%dx%d+%d+%d" % (w, h, max(0, (sw - w) // 2), max(0, (sh - h) // 3)))
         root.minsize(min(retro.px(1100), w), min(retro.px(680), h))
+
+        audio.init(root, save)             # sound effects + background music
 
         self.container = tk.Frame(root, bg=C["bg"])
         self.container.pack(fill="both", expand=True)
@@ -115,6 +119,7 @@ def main():
     root = tk.Tk()
     App(root, SaveData(args.save), seed=args.seed, force_new=args.new)
     root.mainloop()
+    audio.shutdown()
 
 
 if __name__ == "__main__":

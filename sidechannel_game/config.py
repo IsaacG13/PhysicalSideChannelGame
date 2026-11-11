@@ -1,8 +1,12 @@
 """
-config.py -- every tunable number in the game lives here.
+config.py -- the tunable numbers of the simulated smart lock.
 
-Change a value, relaunch (python main.py), and the whole game follows.
-Nothing else in the code hard-codes these numbers.
+Change a value, relaunch (python retro_game.py), and the game follows:
+  * Level 1 (game_with_hints.py -> screen_level1.py) reads the key and timing
+    numbers below.
+  * sim.py (the power-trace model for Levels 2 and 3, not playable yet) reads
+    the power-trace numbers.
+Run  python selftest.py  afterwards: it tests the same simulator players get.
 """
 
 # ----------------------------------------------------------------------------
@@ -20,9 +24,10 @@ MAX_ONES = 11
 # ----------------------------------------------------------------------------
 # Timing model (Level 1)
 # ----------------------------------------------------------------------------
-T_S_MS = 4.0             # duration of one squaring, in milliseconds
+T_S_US = 150.0           # duration of one squaring, in microseconds (shown to students)
 M_TO_S_RATIO = 1.5       # t_M = 1.5 * t_S   (students are told this)
-T_M_MS = T_S_MS * M_TO_S_RATIO
+T_M_US = T_S_US * M_TO_S_RATIO
+T_S_MS = T_S_US / 1000.0  # the same squaring time in milliseconds (used by sim.py)
 
 # Run-to-run timing jitter (Gaussian), expressed in units of t_M.
 # The proposal used 0.5. That made Level 1 trivial (20 runs already gives a
@@ -34,8 +39,7 @@ L1_JITTER_SIGMA_IN_TM = 1.25
 
 L1_MIN_RUNS = 20         # students choose a batch size between these
 L1_MAX_RUNS = 50
-L1_SHOW_REFERENCE_GRID = False   # True draws a faint line per multiply count
-                                 # (makes the lesson easier to read off)
+L1_MAX_BATCHES = 10      # most batches per measurement session (one plot colour each)
 
 # ----------------------------------------------------------------------------
 # Power-trace model (Levels 2 and 3)
@@ -57,4 +61,3 @@ L3_MAX_PER_BATCH = 50    # largest single "Acquire" click
 # ----------------------------------------------------------------------------
 MAX_ATTEMPTS = 3         # tries per submission box. Feedback is only
                          # "correct" / "incorrect", never "3 of 16 bits right".
-# Scoring is intentionally NOT implemented yet (see game logic notes in app.py).

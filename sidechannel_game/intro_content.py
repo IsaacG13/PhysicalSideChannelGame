@@ -30,7 +30,7 @@ PAGES = [
         "title": "WHY HARDWARE SECURITY MATTERS",
         "text": [
             "Smart locks, bank cards and phones all keep a secret **key** inside a "
-            "tiny chip. The maths that protects the key can be practically unbreakable.",
+            "tiny chip. The math that protects the key can be practically unbreakable.",
             "But a chip is a physical object. Every calculation it performs takes "
             "time and draws power, and someone standing next to it can measure both.",
             "**Hardware security** is about making sure the device itself does not "

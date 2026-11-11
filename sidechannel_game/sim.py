@@ -1,12 +1,14 @@
 """
 sim.py -- the simulated smart lock and the "oscilloscope" that measures it.
 
+(Level 1's timing model is game_with_hints.TimingSimulator -- the one the
+game actually uses. This file is the power-trace model for Levels 2 and 3.)
+
 No GUI code in here, so it can be tested and tinkered with on its own:
 
     >>> import sim
     >>> t = sim.Target(seed=1234)
     >>> t.key_bits                       # the secret (students never see it)
-    >>> t.timing_runs(20)                # Level 1 data
     >>> t.acquire_trace(sigma=2.0)       # Level 2 / 3 data
 
 What is modelled (see the proposal): the key-dependent operation sequence,
@@ -124,17 +126,6 @@ class Target:
     def sample_period_ms(self) -> float:
         """One scope sample lasts t_S / SAMPLES_PER_S milliseconds."""
         return cfg.T_S_MS / cfg.SAMPLES_PER_S
-
-    def timing_runs(self, n_runs: int, protected: bool = False) -> np.ndarray:
-        """Level 1: total execution time (ms) of n_runs separate runs.
-
-        time = (#S * t_S) + (#M * t_M) + Gaussian jitter
-        """
-        n_s = cfg.KEY_BITS
-        n_m = cfg.KEY_BITS if protected else sum(self.key_bits)
-        mean = n_s * cfg.T_S_MS + n_m * cfg.T_M_MS
-        jitter_sigma = cfg.L1_JITTER_SIGMA_IN_TM * cfg.T_M_MS
-        return mean + self._meas_rng.normal(0.0, jitter_sigma, size=n_runs)
 
     def acquire_trace(self, sigma: float, protected: bool = False) -> np.ndarray:
         """Levels 2/3: one power trace = clean signal + fresh Gaussian noise."""

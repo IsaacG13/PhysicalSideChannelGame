@@ -20,6 +20,7 @@ import tkinter as tk
 
 import numpy as np
 
+import audio
 import pixelfont
 import scene_art
 from progress import LEVELS
@@ -274,9 +275,13 @@ class MenuScreen(tk.Frame):
             self.sel = key
             self._activate(key)
         elif kind == "icon":
-            self.save.toggle_setting(key)
+            on = self.save.toggle_setting(key)
+            if key == "music":
+                audio.set_music(on)
+            audio.play("click")             # silent when SOUND was just turned off
             self.render()
         elif kind == "new":
+            audio.play("click")
             if time.time() < self.confirm_until:
                 self.app.start_new_game()
             else:
@@ -296,8 +301,10 @@ class MenuScreen(tk.Frame):
     def _activate(self, index):
         lid, name = LEVELS[index]
         if not self.save.is_unlocked(lid):
+            audio.play("wrong")
             self.say("LOCKED: PASS THE LEVEL ABOVE")
             return
+        audio.play("click")
         self.app.open_level(lid)
 
     @staticmethod

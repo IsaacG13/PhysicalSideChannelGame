@@ -17,6 +17,7 @@ import tkinter.font as tkfont
 
 import numpy as np
 
+import audio
 import pixelfont
 
 # =============================================================================
@@ -155,6 +156,8 @@ class RetroButton(tk.Label):
     macOS ignores colours on real buttons.)
 
     kind: "primary" (amber), "secondary" (purple), "blue" (cyan)
+    sound: audio effect played on click ("click" by default). Answer buttons
+           pass sound=None and play "correct" / "wrong" themselves.
     """
 
     KINDS = {
@@ -165,7 +168,8 @@ class RetroButton(tk.Label):
         "bad": ("bad", "#250000", "#ff9a9a"),
     }
 
-    def __init__(self, master, text, command, kind="primary", font=None, **kw):
+    def __init__(self, master, text, command, kind="primary", font=None, sound="click", **kw):
+        self.sound = sound
         bg, fg, hover = self.KINDS[kind]
         self._bg, self._fg, self._hover = C.get(bg, bg), C.get(fg, fg), C.get(hover, hover)
         super().__init__(master, text=text, bg=self._bg, fg=self._fg, font=font,
@@ -183,6 +187,8 @@ class RetroButton(tk.Label):
         self.config(relief="raised")
         inside = 0 <= event.x < self.winfo_width() and 0 <= event.y < self.winfo_height()
         if inside:
+            if self.sound:
+                audio.play(self.sound)
             self.command()
 
     def set_enabled(self, on):

@@ -22,6 +22,7 @@ import tkinter as tk
 
 import numpy as np
 
+import audio
 import intro_content
 import progress
 import scene_art
@@ -77,7 +78,7 @@ def fig_padlock(c, F):
     c.create_text(x, 124, text="UNBREAKABLE", anchor="w", fill=C["good"], font=_fonts(F, 28))
     c.create_text(x, 190, text="THE CHIP", anchor="w", fill=C["muted"], font=_fonts(F, 13))
     c.create_text(x, 224, text="LEAKS", anchor="w", fill=C["bad"], font=_fonts(F, 28))
-    c.create_text(FIG_W // 2, FIG_H - 22, text="Strong maths on leaky hardware is still leaky.",
+    c.create_text(FIG_W // 2, FIG_H - 22, text="Strong math on leaky hardware is still leaky.",
                   fill=C["muted"], font=_fonts(F, 10, False))
 
 
@@ -251,11 +252,12 @@ class IntroScreen(tk.Frame):
         self.page_lbl = tk.Label(right, text="", bg=C["bg"], fg=C["text"], font=self.F["bodyb"])
         self.page_lbl.pack(anchor="e")
 
+        # The nav bar is packed BEFORE the page body (at the bottom) so it always
+        # keeps its space; otherwise tall reading pages pushed it off-screen.
+        nav = tk.Frame(self, bg=C["bg"])
+        nav.pack(side="bottom", fill="x", padx=24, pady=(0, 18))
         self.body = tk.Frame(self, bg=C["bg"])
         self.body.pack(fill="both", expand=True, padx=24, pady=(0, 10))
-
-        nav = tk.Frame(self, bg=C["bg"])
-        nav.pack(fill="x", padx=24, pady=(0, 18))
         self.back_btn = RetroButton(nav, "< BACK", self.back, kind="secondary",
                                     font=self.F["btn"])
         self.back_btn.pack(side="left")
@@ -283,6 +285,7 @@ class IntroScreen(tk.Frame):
         self.pips.set(self.index + 1, on="amber", off="dim")
         self.back_btn.set_enabled(self.index > 0)
         self.next_btn.config(text="FINISH" if last else "NEXT >")
+        self.next_btn.sound = None if last else "click"   # FINISH plays pass / fail
         self._refresh_next()
 
     def _render_reading(self, page):
@@ -325,10 +328,10 @@ class IntroScreen(tk.Frame):
                  wraplength=px(640), justify="center").pack(pady=(0, 24))
         row = tk.Frame(box, bg=C["panel"])
         row.pack()
-        self.true_btn = RetroButton(row, "TRUE", lambda: self._answer(True), kind="good",
+        self.true_btn = RetroButton(row, "TRUE", lambda: self._answer(True), kind="good", sound=None,
                                     font=self.F["h2"])
         self.true_btn.pack(side="left", padx=12)
-        self.false_btn = RetroButton(row, "FALSE", lambda: self._answer(False), kind="bad",
+        self.false_btn = RetroButton(row, "FALSE", lambda: self._answer(False), kind="bad", sound=None,
                                      font=self.F["h2"])
         self.false_btn.pack(side="left", padx=12)
         self.feedback = tk.Label(box, text="", bg=C["panel"], font=self.F["bodyb"],
@@ -343,6 +346,7 @@ class IntroScreen(tk.Frame):
             return
         tf = self.pages[self.index]["tf"]
         self.tf_results[self.index] = (value == tf["answer"])
+        audio.play("correct" if self.tf_results[self.index] else "wrong")
         self._show_feedback(self.tf_results[self.index])
         self._refresh_next()
 
@@ -383,8 +387,10 @@ class IntroScreen(tk.Frame):
         if progress.passed(score, max_score):
             self.save.mark_complete("intro", tf_correct=correct, tf_total=total,
                                     score=score, max_score=max_score)
+            audio.play("correct")
             self.app.show_menu(message="LEVEL 1 UNLOCKED!")
         else:
+            audio.play("wrong")
             self.save.fail_level("intro", score, max_score)
             self.app.show_menu(message=self.app.fail_message("intro"), seconds=6)
 
