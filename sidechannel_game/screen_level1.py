@@ -522,8 +522,6 @@ class Level1Screen(tk.Frame):
         self._persist(attempt=self.attempt, bits_done=self.bits_done,
                       bit_points=self.bit_points, guesses=list(self.guesses))
         self._refresh()
-        if failed:
-            self.after(400, self.show_explanation)  # show the answer right away
 
     def _refresh(self):
         left = g.MAX_ATTEMPTS - self.attempt

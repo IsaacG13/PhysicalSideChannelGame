@@ -143,7 +143,7 @@ class MenuScreen(tk.Frame):
 
         # transient message line
         now = time.time()
-        if self.message and now < self.message_until:
+        if self.message:
             lines = self._wrap(self.message)
             y = min(MESSAGE_Y, bottom_y - 3 - 9 * len(lines))   # never over the seed row
             for line in lines:
@@ -296,7 +296,7 @@ class MenuScreen(tk.Frame):
     def _activate(self, index):
         lid, name = LEVELS[index]
         if not self.save.is_unlocked(lid):
-            self.say("LOCKED: PASS THE LEVEL ABOVE")
+            self.say("LOCKED: PASS THE PREVIOUS LEVEL FIRST")
             return
         self.app.open_level(lid)
 
