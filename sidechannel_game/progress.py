@@ -13,7 +13,8 @@ the program. Use  --save PATH  on the command line to choose another file.
 
 What is stored
     seed       the player's seed (text exactly as entered / generated)
-    levels     per level: whether it was completed plus any score details
+    levels     per level: whether it was completed (= passed) plus score details.
+               A failed level keeps only {failed, score, max_score, fails}.
     settings   sound-effects / music on-off (audio comes later)
     flags      small "have we shown this once" markers (e.g. the Level 1 tour)
 """
@@ -37,11 +38,28 @@ LEVELS = [
 ]
 LEVEL_IDS = [lid for lid, _ in LEVELS]
 
-# The menu shows a placeholder score under every level for now.
-# TINKER: set SHOW_REAL_SCORES = True once the scoring rules are decided, and
-# edit score_text() below to format the numbers however you like.
-SHOW_REAL_SCORES = False
-PLACEHOLDER_SCORE = "0/0"
+# Scores shown in the menu. TINKER: set SHOW_REAL_SCORES = False to go back to
+# the "0/0" placeholder everywhere.
+SHOW_REAL_SCORES = True
+PLACEHOLDER_SCORE = "0/0"          # levels with no scoring yet
+MAX_SCORES = {"intro": 10, "level1": 10}   # shown as 0/N before a level is played
+
+# A level is passed with at least this share of its points; below it the level
+# is failed, stays incomplete, and must be played again before the next unlocks.
+PASS_FRACTION = 0.70
+
+# Levels whose data comes from the seed. Failing one of these gives the player a
+# NEW random seed (new key), so a level can't be brute-forced by replaying it.
+SEEDED_LEVELS = ("level1", "level2", "level3")
+
+
+def level_name(level_id):
+    return dict(LEVELS).get(level_id, level_id.upper())
+
+
+def passed(score, max_score):
+    """True if score is at least PASS_FRACTION of max_score."""
+    return max_score > 0 and score >= PASS_FRACTION * max_score - 1e-9
 
 
 def default_save_path():
@@ -163,15 +181,34 @@ class SaveData:
         self.save()
 
     def mark_complete(self, level_id, **fields):
-        self.update_level(level_id, completed=True, **fields)
+        self.update_level(level_id, completed=True, failed=False, **fields)
+
+    def fail_level(self, level_id, score, max_score):
+        """Record a failed attempt: the level stays incomplete and starts fresh
+        next time. For a seeded level the player also gets a new random seed,
+        and every seeded level's progress is cleared. Returns the new seed, or
+        None if the seed was kept."""
+        fails = int(self.level(level_id).get("fails", 0)) + 1
+        new_seed = None
+        if level_id in SEEDED_LEVELS:
+            new_seed = random_seed()
+            self.data["seed"] = new_seed
+            for lid in SEEDED_LEVELS:
+                self.data["levels"].pop(lid, None)
+        self.data["levels"][level_id] = {"failed": True, "score": score,
+                                         "max_score": max_score, "fails": fails}
+        self.save()
+        return new_seed
 
     def score_text(self, level_id):
-        """What the menu prints under a level name."""
+        """What the menu prints under a level name: the last score, or 0/max."""
         if not SHOW_REAL_SCORES:
             return PLACEHOLDER_SCORE
         rec = self.data["levels"].get(level_id, {})
         if "score" in rec and "max_score" in rec:
             return "%s/%s" % (rec["score"], rec["max_score"])
+        if level_id in MAX_SCORES:
+            return "0/%d" % MAX_SCORES[level_id]
         return PLACEHOLDER_SCORE
 
     # --------------------------------------------------------------- settings

@@ -5,9 +5,10 @@ figures, answer the true/false checks, and unlock Level 1.
 The words live in intro_content.py (edit that file, not this one).
 This file draws the pages and the built-in figures.
 
-Completing the level = reaching the last page and pressing FINISH. The
-true/false answers are remembered in the save file (tf_correct / tf_total) so
-they can be scored later. Replaying a finished level never changes the record.
+Scoring: each true/false question is worth TF_POINTS (5) points. Pressing
+FINISH on the last page scores the level; below progress.PASS_FRACTION (70%)
+the level is failed and must be played again before Level 1 unlocks.
+Replaying a passed level never changes the record.
 
 TINKER:
   * To add a built-in figure: write a function fig_xxx(canvas, F) like the ones
@@ -22,12 +23,14 @@ import tkinter as tk
 import numpy as np
 
 import intro_content
+import progress
 import scene_art
 from retro import (C, Pips, ReadOnlyText, RetroButton, font, hexcolor, panel, px, topbar)
 import retro
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIG_W, FIG_H = 560, 340          # size of the figure area in pixels
+TF_POINTS = 5                    # points per true/false question
 
 
 # =============================================================================
@@ -374,9 +377,16 @@ class IntroScreen(tk.Frame):
         if self.practice:
             self.app.show_menu()
             return
-        self.save.mark_complete("intro", tf_correct=sum(self.tf_results.values()),
-                                tf_total=len(self.tf_results))
-        self.app.show_menu(message="LEVEL 1 UNLOCKED!")
+        correct = sum(self.tf_results.values())
+        total = sum(1 for p in self.pages if "tf" in p)
+        score, max_score = correct * TF_POINTS, total * TF_POINTS
+        if progress.passed(score, max_score):
+            self.save.mark_complete("intro", tf_correct=correct, tf_total=total,
+                                    score=score, max_score=max_score)
+            self.app.show_menu(message="LEVEL 1 UNLOCKED!")
+        else:
+            self.save.fail_level("intro", score, max_score)
+            self.app.show_menu(message=self.app.fail_message("intro"), seconds=6)
 
     def destroy(self):
         for seq in ("<Left>", "<Right>"):
