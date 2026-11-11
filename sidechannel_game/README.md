@@ -1,50 +1,45 @@
-# Side-Channel Attack Game - demo build
+# Side-Channel Attack! (retro build)
 
-A playable test build of the square-and-multiply smart-lock game:
-Introduction -> Level 1 (timing) -> Level 2 (SPA) -> Level 3 (noise + protected lock) -> Review.
-Scoring is intentionally not implemented yet.
+Start the game with:   python retro_game.py     (python3 on macOS / Linux)
 
-## Requirements
-Python 3.9+ with Tkinter, NumPy and Matplotlib.
+Flow: first launch asks for a seed (type one or press RANDOMIZE) -> main menu ->
+Introduction -> Level 1: Timing. Levels 2, 3 and Review show "COMING SOON".
+Each level unlocks when the one above is completed. Progress and the seed are saved.
 
-### Windows
-1. Install Python from https://www.python.org/downloads/ (Tkinter is included; keep the
-   "tcl/tk and IDLE" option ticked, and tick "Add python.exe to PATH").
-2. In a terminal (PowerShell or cmd) inside this folder:
-       python -m pip install -r requirements.txt
-       python main.py
+## Install
+You need Python 3.9+ with Tkinter, NumPy and Matplotlib.
 
-### macOS
-1. Install Python from https://www.python.org/downloads/ (Tkinter included).
-   If you use Homebrew Python instead, also run:  brew install python-tk
-2. In Terminal inside this folder:
-       python3 -m pip install -r requirements.txt
-       python3 main.py
+Windows:  install Python from python.org (keep "tcl/tk and IDLE" ticked and tick
+          "Add python.exe to PATH"), then in this folder:
+              python -m pip install -r requirements.txt
+              python retro_game.py
+macOS:    install Python from python.org (Homebrew Python also needs: brew install python-tk), then:
+              python3 -m pip install -r requirements.txt
+              python3 retro_game.py
+Linux:    install Tkinter first:
+              Debian/Ubuntu: sudo apt install python3-tk python3-pip
+              Fedora:        sudo dnf install python3-tkinter python3-pip
+              Arch:          sudo pacman -S tk python-pip
+          then:  python3 -m pip install -r requirements.txt   (add --break-system-packages
+          on newer distros if pip refuses)   and   python3 retro_game.py
 
-### Linux
-1. Install Tkinter through your package manager (it is a separate package):
-       Debian / Ubuntu:  sudo apt install python3-tk python3-pip
-       Fedora:           sudo dnf install python3-tkinter python3-pip
-       Arch:             sudo pacman -S tk python-pip
-2. In a terminal inside this folder:
-       python3 -m pip install -r requirements.txt
-       python3 main.py
-   (If pip complains about an "externally managed environment", use a virtual env:
-    python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt)
+Screen: designed for 1366x768 or larger (window height about 680 px). High-DPI
+displays are scaled automatically.
 
-## Launching
-    python main.py                       # asks for a student ID (blank = random game)
-    python main.py --student alice123    # same ID always gives the same key and traces
-    python main.py --seed 42             # explicit integer seed
+## Options
+    --seed TEXT   start a new game with that seed (same seed keeps progress)
+    --new         show the NEW GAME screen
+    --save PATH   use another save file (useful for demos and testing)
 
-## Handy demo tools
-* Developer menu -> "Reveal key (spoiler!)" and "New random target".
-* Matplotlib toolbar under each plot: magnifier = zoom, cross = pan, house = reset view.
-* `python selftest.py` checks difficulty (success rates at each level) with no GUI.
+Save file: Windows %APPDATA%\SideChannelGame\save.json,
+macOS ~/Library/Application Support/SideChannelGame/save.json,
+Linux ~/.local/share/SideChannelGame/save.json (falls back to the game folder).
+Delete it to reset everything.
 
-## Files
-    config.py    every tunable number (timing, jitter, noise, attempts, trace budget)
-    sim.py       the simulated lock + oscilloscope (no GUI code)
-    main.py      the Tkinter app; look for "TINKER:" comments
-    selftest.py  headless difficulty calibration
-Written free-text answers are appended to responses_log.jsonl (no grading yet).
+## Where to tinker
+    intro_content.py     Introduction text and figures (plain text, easy to edit)
+    game_with_hints.py   Level 1 simulation, hints and scoring (imported by the game)
+    screen_menu.py       menu layout; progress.py -> score_text / SHOW_REAL_SCORES for scores
+    retro.py             colours and fonts       scene_art.py / pixelfont.py   pixel art
+The older prototype files (main.py, level1_timing.py, ...) are kept untouched;
+see README_old_prototype.md.
